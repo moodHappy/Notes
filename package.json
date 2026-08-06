@@ -7,6 +7,6 @@
     "docs:preview": "vitepress preview"
   },
   "devDependencies": {
-    "vitepress": "^3.0.0"
+    "vitepress": "latest"
   }
 }
