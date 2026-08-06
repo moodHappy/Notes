@@ -1,7 +1,6 @@
 <script>
-// 核心修正 3：在组件外部定义全局状态仓库。
-// 无论你进出多少次网页，只要是在同一个浏览器，系统都会精准读取你上次展开了哪些文件夹。
 import { reactive } from 'vue'
+// 全局状态：保持你的文件夹展开记忆
 const folderState = reactive(JSON.parse(typeof localStorage !== 'undefined' ? localStorage.getItem('vp_folder_state') || '{}' : '{}'))
 </script>
 
@@ -13,7 +12,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['edit', 'delete'])
 
-// 监听用户的点击操作，瞬间将其写入本地存储
+// 监听文件夹点击，保持展开状态
 const onToggle = (e) => {
   if (props.node.items) {
     const id = props.node.id || props.node.text
@@ -23,11 +22,16 @@ const onToggle = (e) => {
     }
   }
 }
+
+// 核心修复：强制浏览器物理跳转，打破 SPA 路由劫持，唤醒翻译脚本
+const forceReloadNavigate = (e, link) => {
+  e.preventDefault() // 阻止 Vue Router 的默认拦截行为
+  window.location.href = withBase(link) // 直接操控浏览器顶层对象进行真实的页面刷新跳转
+}
 </script>
 
 <template>
   <div class="tree-node">
-    <!-- 将 open 状态与全局状态强绑定，一旦展开，退出再进也不会合上 -->
     <details 
       v-if="node.items" 
       class="folder-details" 
@@ -53,7 +57,8 @@ const onToggle = (e) => {
     </details>
 
     <div v-else class="note-row">
-      <a :href="withBase(node.link)" class="note-link">
+      <!-- 在 a 标签加上 @click 强行接管跳转逻辑 -->
+      <a :href="withBase(node.link)" class="note-link" @click="forceReloadNavigate($event, node.link)">
         <span class="note-icon">📄</span>
         <span class="note-name">{{ node.text }}</span>
         <span class="note-date">{{ node.date }}</span>
