@@ -8,27 +8,20 @@ const inputFolder = ref('')
 const inputFile = ref('')
 const content = ref('')
 const statusMsg = ref('')
-const textareaRef = ref(null) // 绑定文本框实例，用于精准控制光标
+const textareaRef = ref(null)
 
-// 自动抓取全局已存在的文件夹目录
-const existingFolders = computed(() => {
-  const folders = new Set()
-  const traverse = (nodes) => {
-    if (!nodes) return
-    nodes.forEach(node => {
-      if (node.items) {
-        if (node.id) folders.add(node.id)
-        traverse(node.items)
-      }
-    })
-  }
-  traverse(theme.value.sidebar)
-  return Array.from(folders)
-})
+// 专门用于存储本地历史目录的变量
+const localUsedFolders = ref([])
 
 onMounted(() => {
   const savedToken = localStorage.getItem('gh_api_token')
   if (savedToken) token.value = savedToken
+  
+  // 核心增强：读取本地记住的历史目录
+  const savedFolders = localStorage.getItem('vp_used_folders')
+  if (savedFolders) {
+    localUsedFolders.value = JSON.parse(savedFolders)
+  }
   
   const urlParams = new URLSearchParams(window.location.search)
   let pathParam = urlParams.get('path')
@@ -41,6 +34,34 @@ onMounted(() => {
      loadExistingNote()
   }
 })
+
+// 融合云端已有目录和本地历史目录
+const existingFolders = computed(() => {
+  const folders = new Set(localUsedFolders.value)
+  
+  // 遍历当前站点已经存在的目录
+  const traverse = (nodes) => {
+    if (!nodes) return
+    nodes.forEach(node => {
+      if (node.items) {
+        if (node.id) {
+           const cleanName = node.id.replace(/^\/+/, '') // 去除开头的斜杠
+           if (cleanName) folders.add(cleanName)
+        } else if (node.text) {
+           folders.add(node.text + '/')
+        }
+        traverse(node.items)
+      }
+    })
+  }
+  traverse(theme.value.sidebar)
+  return Array.from(folders).sort()
+})
+
+// 点击标签，一键填入目录
+const selectFolder = (folderName) => {
+  inputFolder.value = folderName
+}
 
 const saveToken = () => {
   localStorage.setItem('gh_api_token', token.value)
@@ -122,6 +143,15 @@ const publishNote = async () => {
 
     if (putRes.ok) {
       statusMsg.value = '✅ 发布成功！约1分钟后刷新页面生效。'
+      
+      // 核心增强：发布成功后，自动将该目录加入本地记忆库
+      let folderStr = inputFolder.value.trim().replace(/^\/+/, '')
+      if (folderStr && !folderStr.endsWith('/')) folderStr += '/'
+      if (folderStr && !localUsedFolders.value.includes(folderStr)) {
+        localUsedFolders.value.push(folderStr)
+        localStorage.setItem('vp_used_folders', JSON.stringify(localUsedFolders.value))
+      }
+      
     } else {
       const errorData = await putRes.json()
       statusMsg.value = `❌ 发布失败: ${errorData.message}`
@@ -131,9 +161,7 @@ const publishNote = async () => {
   }
 }
 
-// ====== 核心功能：Markdown 工具栏引擎 ======
-
-// 基础插入器（支持选中文本包裹）
+// ====== Markdown 工具栏引擎 ======
 const insertMarkdown = (prefix, suffix = '') => {
   const textarea = textareaRef.value
   if (!textarea) return
@@ -147,19 +175,16 @@ const insertMarkdown = (prefix, suffix = '') => {
   
   nextTick(() => {
     textarea.focus()
-    // 插入后，光标自动选中刚刚包裹的内容，或者停留在括号中间
     textarea.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length)
   })
 }
 
-// 智能链接插入器
 const insertLink = () => {
   const textarea = textareaRef.value
   if (!textarea) return
   
-  // 利用原生 Prompt 稳妥获取移动端剪贴板的链接
   const url = window.prompt('请粘贴链接地址 (URL)：', '')
-  if (!url) return // 用户取消或未输入
+  if (!url) return 
   
   const start = textarea.selectionStart
   const end = textarea.selectionEnd
@@ -170,7 +195,6 @@ const insertLink = () => {
   
   nextTick(() => {
     textarea.focus()
-    // 精准框选标题文字，方便直接打字替换
     textarea.setSelectionRange(start + 1, start + 1 + selectedText.length)
   })
 }
@@ -182,13 +206,11 @@ const insertLink = () => {
       <input type="password" v-model="token" placeholder="输入 GitHub API Token" @blur="saveToken" />
     </div>
     
+    <!-- 路径配置区 -->
     <div class="file-config-group">
       <div class="input-wrapper folder-wrapper">
         <span class="icon">📁</span>
-        <input list="folder-options" v-model="inputFolder" placeholder="目录 (如 english/)" />
-        <datalist id="folder-options">
-          <option v-for="folder in existingFolders" :key="folder" :value="folder"></option>
-        </datalist>
+        <input v-model="inputFolder" placeholder="输入或下方选目录" />
       </div>
       
       <span class="divider">/</span>
@@ -201,7 +223,21 @@ const insertLink = () => {
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
-    <!-- 集成式编辑器面板 -->
+    <!-- 快捷目录选择区 (横向滑动) -->
+    <div class="quick-select-zone" v-if="existingFolders.length > 0">
+      <span class="quick-label">常用：</span>
+      <div class="tags-scroll">
+        <span 
+          v-for="folder in existingFolders" 
+          :key="folder" 
+          class="folder-tag" 
+          @click="selectFolder(folder)"
+        >
+          {{ folder }}
+        </span>
+      </div>
+    </div>
+
     <div class="editor-box">
       <!-- 快捷工具栏 -->
       <div class="toolbar">
@@ -245,57 +281,20 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
 .btn-load:hover { background-color: var(--vp-c-divider); }
 
-/* 编辑器集成面板外观 */
-.editor-box {
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--vp-c-bg-soft);
-  display: flex;
-  flex-direction: column;
-}
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px;
-  background: var(--vp-c-bg-mute);
-  border-bottom: 1px solid var(--vp-c-divider);
-  overflow-x: auto; /* 在手机上如果工具太多可以横向滑动 */
-  white-space: nowrap;
-}
-.toolbar button {
-  padding: 6px 12px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 15px;
-  color: var(--vp-c-text-1);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.toolbar button:hover {
-  background: var(--vp-c-bg-soft);
-  border-color: var(--vp-c-divider);
-}
-.toolbar-divider {
-  width: 1px;
-  height: 20px;
-  background-color: var(--vp-c-divider);
-  margin: 0 4px;
-}
-textarea { 
-  width: 100%; 
-  padding: 16px; 
-  border: none; 
-  outline: none;
-  font-size: 16px; 
-  box-sizing: border-box; 
-  height: 55vh; 
-  resize: vertical; 
-  font-family: monospace; 
-  background: transparent; 
-}
+/* 快捷标签区样式 */
+.quick-select-zone { display: flex; align-items: center; gap: 8px; padding: 0 4px; overflow: hidden; }
+.quick-label { font-size: 0.85rem; color: var(--vp-c-text-2); white-space: nowrap; font-weight: bold; }
+.tags-scroll { display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; padding-bottom: 4px; scrollbar-width: none; }
+.tags-scroll::-webkit-scrollbar { display: none; }
+.folder-tag { background: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; color: var(--vp-c-text-1); cursor: pointer; transition: all 0.2s; }
+.folder-tag:hover { background: var(--vp-c-brand-soft); color: var(--vp-c-brand-dark); border-color: var(--vp-c-brand); }
+
+.editor-box { border: 1px solid var(--vp-c-divider); border-radius: 8px; overflow: hidden; background: var(--vp-c-bg-soft); display: flex; flex-direction: column; }
+.toolbar { display: flex; align-items: center; gap: 4px; padding: 8px; background: var(--vp-c-bg-mute); border-bottom: 1px solid var(--vp-c-divider); overflow-x: auto; white-space: nowrap; }
+.toolbar button { padding: 6px 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: 15px; color: var(--vp-c-text-1); cursor: pointer; transition: all 0.2s; }
+.toolbar button:hover { background: var(--vp-c-bg-soft); border-color: var(--vp-c-divider); }
+.toolbar-divider { width: 1px; height: 20px; background-color: var(--vp-c-divider); margin: 0 4px; }
+textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 16px; box-sizing: border-box; height: 55vh; resize: vertical; font-family: monospace; background: transparent; }
 
 .btn-publish { padding: 14px; background-color: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; font-size: 1.1rem; cursor: pointer; transition: background 0.2s; }
 .btn-publish:hover { background-color: #059669; }
