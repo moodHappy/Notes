@@ -10,7 +10,6 @@ const content = ref('')
 const statusMsg = ref('')
 const textareaRef = ref(null)
 
-// 状态管理：本地历史、隐藏黑名单、下拉菜单开关
 const localUsedFolders = ref([])
 const hiddenFolders = ref([])
 const showFolderDropdown = ref(false)
@@ -19,35 +18,30 @@ onMounted(() => {
   const savedToken = localStorage.getItem('gh_api_token')
   if (savedToken) token.value = savedToken
   
-  // 读取历史记录和被红叉删除的黑名单
   const savedFolders = localStorage.getItem('vp_used_folders')
   if (savedFolders) localUsedFolders.value = JSON.parse(savedFolders)
   
   const savedHidden = localStorage.getItem('vp_hidden_folders')
   if (savedHidden) hiddenFolders.value = JSON.parse(savedHidden)
   
-  // 读取最后一次成功发布的目录，作为默认值
   const savedDefault = localStorage.getItem('vp_default_folder')
   
   const urlParams = new URLSearchParams(window.location.search)
   let pathParam = urlParams.get('path')
   
   if (pathParam) {
-     // 如果是从目录点击“编辑”进来的，解析原有路径
      pathParam = pathParam.replace(/^\//, '')
      const parts = pathParam.split('/')
      inputFile.value = parts.pop()
      inputFolder.value = parts.length > 0 ? parts.join('/') + '/' : ''
      loadExistingNote()
   } else {
-     // 全新写作：自动填入最近一次使用的目录作为默认
      if (savedDefault) {
        inputFolder.value = savedDefault
      }
   }
 })
 
-// 计算属性：融合云端真实目录 + 本地历史目录，并过滤掉被删掉的黑名单
 const existingFolders = computed(() => {
   const folders = new Set(localUsedFolders.value)
   const traverse = (nodes) => {
@@ -71,13 +65,11 @@ const existingFolders = computed(() => {
     .sort()
 })
 
-// 点击列表项：选择目录
 const selectFolder = (folderName) => {
   inputFolder.value = folderName
   showFolderDropdown.value = false
 }
 
-// 核心功能：点击红叉删除目录记录
 const removeFolder = (folderName, event) => {
   event.stopPropagation() 
   
@@ -285,8 +277,9 @@ const insertLink = () => {
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
+    <!-- 核心区域：彻底解除 overflow 限制，赋予工具栏吸顶能力 -->
     <div class="editor-box">
-      <!-- 快捷工具栏，已加入强力的分隔符功能 -->
+      <!-- 吸顶工具栏 -->
       <div class="toolbar">
         <button @click="insertLink" title="插入链接">🔗 链接</button>
         <div class="toolbar-divider"></div>
@@ -342,12 +335,33 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
 .btn-load:hover { background-color: var(--vp-c-divider); }
 
-.editor-box { border: 1px solid var(--vp-c-divider); border-radius: 8px; overflow: hidden; background: var(--vp-c-bg-soft); display: flex; flex-direction: column; z-index: 1; }
-.toolbar { display: flex; align-items: center; gap: 4px; padding: 8px; background: var(--vp-c-bg-mute); border-bottom: 1px solid var(--vp-c-divider); overflow-x: auto; white-space: nowrap; }
+/* 删除了 overflow: hidden，释放 sticky 封印 */
+.editor-box { border: 1px solid var(--vp-c-divider); border-radius: 8px; background: var(--vp-c-bg-soft); display: flex; flex-direction: column; z-index: 1; position: relative; }
+
+/* 核心优化：赋予工具栏吸顶能力 */
+.toolbar { 
+  position: -webkit-sticky; 
+  position: sticky; 
+  top: 0; /* 在可视区域顶部自动悬浮 */
+  z-index: 15; /* 保证它压在正文文本上方 */
+  display: flex; 
+  align-items: center; 
+  gap: 4px; 
+  padding: 8px; 
+  background: var(--vp-c-bg-mute); 
+  backdrop-filter: blur(8px); /* 给吸顶加上高级的毛玻璃效果 */
+  border-bottom: 1px solid var(--vp-c-divider); 
+  border-radius: 8px 8px 0 0; /* 保持顶部圆角 */
+  overflow-x: auto; 
+  white-space: nowrap; 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* 悬浮时的阴影切割感 */
+}
+
 .toolbar button { padding: 6px 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: 15px; color: var(--vp-c-text-1); cursor: pointer; transition: all 0.2s; }
 .toolbar button:hover { background: var(--vp-c-bg-soft); border-color: var(--vp-c-divider); }
 .toolbar-divider { width: 1px; height: 20px; background-color: var(--vp-c-divider); margin: 0 4px; }
-textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 16px; box-sizing: border-box; height: 55vh; resize: vertical; font-family: monospace; background: transparent; color: var(--vp-c-text-1); }
+
+textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 16px; box-sizing: border-box; height: 55vh; resize: vertical; font-family: monospace; background: transparent; color: var(--vp-c-text-1); border-radius: 0 0 8px 8px; }
 
 .btn-publish { padding: 14px; background-color: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; font-size: 1.1rem; cursor: pointer; transition: background 0.2s; }
 .btn-publish:hover { background-color: #059669; }
