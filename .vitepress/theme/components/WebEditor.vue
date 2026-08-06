@@ -8,8 +8,9 @@ const inputFolder = ref('')
 const inputFile = ref('')
 const content = ref('')
 const statusMsg = ref('')
+const textareaRef = ref(null) // 绑定文本框实例，用于精准控制光标
 
-// 自动抓取已有文件夹供下拉选择
+// 自动抓取全局已存在的文件夹目录
 const existingFolders = computed(() => {
   const folders = new Set()
   const traverse = (nodes) => {
@@ -76,7 +77,7 @@ const loadExistingNote = async () => {
        content.value = base64ToUtf8(data.content)
        statusMsg.value = '✅ 笔记加载成功！'
     } else {
-       statusMsg.value = '🆕 这是一个新笔记路径。'
+       statusMsg.value = '🆕 这是一个新笔记。'
     }
   } catch (e) {
      statusMsg.value = `❌ 读取失败: ${e.message}`
@@ -120,7 +121,7 @@ const publishNote = async () => {
     })
 
     if (putRes.ok) {
-      statusMsg.value = '✅ 发布成功！约1分钟后重载页面即可生效。'
+      statusMsg.value = '✅ 发布成功！约1分钟后刷新页面生效。'
     } else {
       const errorData = await putRes.json()
       statusMsg.value = `❌ 发布失败: ${errorData.message}`
@@ -130,40 +131,48 @@ const publishNote = async () => {
   }
 }
 
-// 终极修复方案：针对安卓与各类移动端浏览器的强力粘贴接管
-const handlePaste = async (e) => {
-  const clipboardData = e.clipboardData || window.clipboardData;
-  if (!clipboardData) return;
+// ====== 核心功能：Markdown 工具栏引擎 ======
 
-  // 绝招 1：废弃单纯的 text/plain，使用多级降级取值，专治部分安卓机型不给值的问题
-  let pastedText = clipboardData.getData('text') || clipboardData.getData('text/plain') || '';
-  pastedText = pastedText.trim();
+// 基础插入器（支持选中文本包裹）
+const insertMarkdown = (prefix, suffix = '') => {
+  const textarea = textareaRef.value
+  if (!textarea) return
 
-  // 严谨匹配纯正的 HTTP 链接，中间不能带空格
-  const urlRegex = /^https?:\/\/[^\s]+$/i;
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const selectedText = content.value.substring(start, end)
   
-  if (urlRegex.test(pastedText)) {
-    // 绝招 2：立刻掐断系统原生粘贴，防止裸链接跑上屏幕
-    e.preventDefault(); 
-    
-    const textarea = e.target;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    
-    const titlePlaceholder = "输入标题";
-    const mdLink = `[${titlePlaceholder}](${pastedText})`;
-    
-    // 直接操作 Vue 数据，完成替换
-    content.value = content.value.substring(0, start) + mdLink + content.value.substring(end);
-    
-    // 绝招 3：移动端专属的双重锁帧。必须等 DOM 刷新完，再加上额外的延时，才能在软键盘弹出的情况下强行抓住光标！
-    await nextTick();
-    setTimeout(() => {
-      textarea.focus();
-      // 精确框选“输入标题”这四个字，方便直接打字替换
-      textarea.setSelectionRange(start + 1, start + 1 + titlePlaceholder.length);
-    }, 80);
-  }
+  const replacement = prefix + selectedText + suffix
+  content.value = content.value.substring(0, start) + replacement + content.value.substring(end)
+  
+  nextTick(() => {
+    textarea.focus()
+    // 插入后，光标自动选中刚刚包裹的内容，或者停留在括号中间
+    textarea.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length)
+  })
+}
+
+// 智能链接插入器
+const insertLink = () => {
+  const textarea = textareaRef.value
+  if (!textarea) return
+  
+  // 利用原生 Prompt 稳妥获取移动端剪贴板的链接
+  const url = window.prompt('请粘贴链接地址 (URL)：', '')
+  if (!url) return // 用户取消或未输入
+  
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const selectedText = content.value.substring(start, end) || '输入标题'
+  
+  const replacement = `[${selectedText}](${url})`
+  content.value = content.value.substring(0, start) + replacement + content.value.substring(end)
+  
+  nextTick(() => {
+    textarea.focus()
+    // 精准框选标题文字，方便直接打字替换
+    textarea.setSelectionRange(start + 1, start + 1 + selectedText.length)
+  })
 }
 </script>
 
@@ -192,11 +201,26 @@ const handlePaste = async (e) => {
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
-    <textarea 
-      v-model="content" 
-      placeholder="# 在这里使用 Markdown 痛快地写笔记..."
-      @paste="handlePaste"
-    ></textarea>
+    <!-- 集成式编辑器面板 -->
+    <div class="editor-box">
+      <!-- 快捷工具栏 -->
+      <div class="toolbar">
+        <button @click="insertLink" title="插入链接">🔗 链接</button>
+        <div class="toolbar-divider"></div>
+        <button @click="insertMarkdown('**', '**')" title="粗体"><b>B</b></button>
+        <button @click="insertMarkdown('*', '*')" title="斜体"><i>I</i></button>
+        <button @click="insertMarkdown('## ', '')" title="标题">#️⃣</button>
+        <div class="toolbar-divider"></div>
+        <button @click="insertMarkdown('> ', '')" title="引用">❞</button>
+        <button @click="insertMarkdown('\n```\n', '\n```\n')" title="代码块">&lt;&gt;</button>
+      </div>
+      
+      <textarea 
+        ref="textareaRef"
+        v-model="content" 
+        placeholder="# 在这里使用 Markdown 痛快地写笔记..."
+      ></textarea>
+    </div>
     
     <div class="actions">
       <button @click="publishNote" class="btn-publish">🚀 保存 / 更新笔记</button>
@@ -208,7 +232,7 @@ const handlePaste = async (e) => {
 <style scoped>
 .editor-container { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
 input { width: 100%; border: none; outline: none; background: transparent; font-size: 16px; }
-textarea { width: 100%; padding: 12px; border: 1px solid var(--vp-c-divider); border-radius: 8px; font-size: 16px; box-sizing: border-box; height: 55vh; resize: vertical; font-family: monospace; background: var(--vp-c-bg-soft); }
+
 .api-config { padding: 12px; border: 1px solid var(--vp-c-divider); border-radius: 8px; background: var(--vp-c-bg-soft); }
 
 .file-config-group { display: flex; align-items: center; gap: 8px; }
@@ -220,6 +244,59 @@ textarea { width: 100%; padding: 12px; border: 1px solid var(--vp-c-divider); bo
 
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
 .btn-load:hover { background-color: var(--vp-c-divider); }
+
+/* 编辑器集成面板外观 */
+.editor-box {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--vp-c-bg-soft);
+  display: flex;
+  flex-direction: column;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  background: var(--vp-c-bg-mute);
+  border-bottom: 1px solid var(--vp-c-divider);
+  overflow-x: auto; /* 在手机上如果工具太多可以横向滑动 */
+  white-space: nowrap;
+}
+.toolbar button {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 15px;
+  color: var(--vp-c-text-1);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.toolbar button:hover {
+  background: var(--vp-c-bg-soft);
+  border-color: var(--vp-c-divider);
+}
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--vp-c-divider);
+  margin: 0 4px;
+}
+textarea { 
+  width: 100%; 
+  padding: 16px; 
+  border: none; 
+  outline: none;
+  font-size: 16px; 
+  box-sizing: border-box; 
+  height: 55vh; 
+  resize: vertical; 
+  font-family: monospace; 
+  background: transparent; 
+}
+
 .btn-publish { padding: 14px; background-color: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; font-size: 1.1rem; cursor: pointer; transition: background 0.2s; }
 .btn-publish:hover { background-color: #059669; }
 .status { font-size: 14px; color: var(--vp-c-text-2); text-align: center; margin-top: 5px; }
