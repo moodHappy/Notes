@@ -3,7 +3,6 @@ import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 
-// 核心优化 1：强力屏蔽黑名单，绝对不让 README.md 这类系统文件污染你的笔记目录
 const IGNORE_LIST = ['.git', '.github', '.vitepress', 'node_modules', 'public', 'index.md', 'README.md', 'directory.md', 'write.md']
 
 function getDynamicSidebar(dirPath, basePath = '') {
@@ -13,17 +12,17 @@ function getDynamicSidebar(dirPath, basePath = '') {
   const files = fs.readdirSync(dirPath);
 
   for (const file of files) {
-    // 遇到黑名单文件或隐藏文件，直接跳过
     if (file.startsWith('.') || IGNORE_LIST.includes(file)) continue;
     
     const fullPath = path.join(dirPath, file);
     const stat = fs.statSync(fullPath);
     
     if (stat.isDirectory()) {
-      const subItems = getDynamicSidebar(fullPath, `${basePath}${file}/`);
+      // 核心修正 1：生成文件夹唯一标识 id，交给前端用来“记住”展开状态
+      const folderId = `${basePath}${file}/`;
+      const subItems = getDynamicSidebar(fullPath, folderId);
       if (subItems.length > 0) {
-        // 文件夹节点：默认折叠状态 (collapsed: true)
-        items.push({ text: file, items: subItems, collapsed: true });
+        items.push({ text: file, id: folderId, items: subItems, collapsed: true });
       }
     } else if (file.endsWith('.md')) {
       const name = file.replace(/\.md$/, '');
@@ -66,6 +65,10 @@ export default defineConfig({
       { text: '✍️ 写作台', link: '/write' }
     ],
     sidebar: getDynamicSidebar(path.resolve(__dirname, '../')),
+    
+    // 核心修正 2：彻底屏蔽底部画蛇添足的“上一篇/下一篇”按钮
+    docFooter: { prev: false, next: false },
+    
     socialLinks: [{ icon: 'github', link: 'https://github.com/moodHappy/Notes' }],
     search: { provider: 'local' }
   }
