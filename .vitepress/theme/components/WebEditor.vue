@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useData } from 'vitepress'
 
 const { theme } = useData()
@@ -9,7 +9,7 @@ const inputFile = ref('')
 const content = ref('')
 const statusMsg = ref('')
 
-// 自动抓取全局已存在的文件夹目录，供下拉框使用
+// 自动抓取全局已存在的文件夹目录
 const existingFolders = computed(() => {
   const folders = new Set()
   const traverse = (nodes) => {
@@ -32,9 +32,8 @@ onMounted(() => {
   const urlParams = new URLSearchParams(window.location.search)
   let pathParam = urlParams.get('path')
   
-  // 如果是从编辑按钮跳过来的，智能拆解目录和文件名
   if (pathParam) {
-     pathParam = pathParam.replace(/^\//, '') // 去除开头的斜杠
+     pathParam = pathParam.replace(/^\//, '')
      const parts = pathParam.split('/')
      inputFile.value = parts.pop()
      inputFolder.value = parts.length > 0 ? parts.join('/') + '/' : ''
@@ -50,9 +49,8 @@ const saveToken = () => {
 const utf8ToBase64 = (str) => btoa(unescape(encodeURIComponent(str)))
 const base64ToUtf8 = (str) => decodeURIComponent(escape(atob(str.replace(/\s/g, ''))))
 
-// 组合路径处理器
 const getFullPath = () => {
-  let folder = inputFolder.value.trim().replace(/^\/+/, '') // 去除前导斜杠
+  let folder = inputFolder.value.trim().replace(/^\/+/, '')
   if (folder && !folder.endsWith('/')) folder += '/'
   let file = inputFile.value.trim().replace(/\.md$/, '')
   if (!file) file = '未命名笔记'
@@ -61,12 +59,12 @@ const getFullPath = () => {
 
 const loadExistingNote = async () => {
   if (!token.value) {
-    statusMsg.value = '⚠️ 请先输入 Token 才能拉取原笔记内容'
+    statusMsg.value = '⚠️ 请先输入 Token 才能拉取'
     return
   }
   if (!inputFile.value.trim()) return
 
-  statusMsg.value = '⏳ 正在从云端拉取笔记内容...'
+  statusMsg.value = '⏳ 正在从云端拉取...'
   const finalPath = getFullPath()
   
   try {
@@ -76,9 +74,9 @@ const loadExistingNote = async () => {
     if (res.ok) {
        const data = await res.json()
        content.value = base64ToUtf8(data.content)
-       statusMsg.value = '✅ 笔记加载成功，可直接修改正文！'
+       statusMsg.value = '✅ 笔记加载成功！'
     } else {
-       statusMsg.value = '🆕 这是一个全新的笔记。'
+       statusMsg.value = '🆕 这是一个新笔记。'
     }
   } catch (e) {
      statusMsg.value = `❌ 读取失败: ${e.message}`
@@ -122,7 +120,7 @@ const publishNote = async () => {
     })
 
     if (putRes.ok) {
-      statusMsg.value = '✅ 发布成功！约 1 分钟后网页自动更新。'
+      statusMsg.value = '✅ 发布成功！约 1 分钟后刷新页面生效。'
     } else {
       const errorData = await putRes.json()
       statusMsg.value = `❌ 发布失败: ${errorData.message}`
@@ -132,28 +130,39 @@ const publishNote = async () => {
   }
 }
 
-// 核心黑科技：智能粘贴拦截
-const handlePaste = (e) => {
-  const pastedText = (e.clipboardData || window.clipboardData).getData('text').trim();
-  // 正则判断：如果粘贴的是一个纯正的 http/https 链接
+// 核心修复：移动端强力拦截与格式化机制
+const handlePaste = async (e) => {
+  // 1. 兼容移动端的剪贴板文本抓取
+  let pastedText = ''
+  if (e.clipboardData && e.clipboardData.getData) {
+    pastedText = e.clipboardData.getData('text/plain')
+  } else if (window.clipboardData && window.clipboardData.getData) {
+    pastedText = window.clipboardData.getData('Text')
+  }
+  pastedText = pastedText.trim()
+
   const urlRegex = /^https?:\/\/[^\s]+$/;
   
   if (urlRegex.test(pastedText)) {
-    e.preventDefault(); // 阻止默认粘贴行为
-    const mdLink = `[输入标题](${pastedText})`;
+    // 2. 强行掐断浏览器的原生粘贴行为，防止裸链接上屏
+    e.preventDefault(); 
     
     const textarea = e.target;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     
-    // 插入 Markdown 格式的链接
+    const titlePlaceholder = "输入标题";
+    const mdLink = `[${titlePlaceholder}](${pastedText})`;
+    
+    // 3. 将格式化后的内容写入 Vue 模型
     content.value = content.value.substring(0, start) + mdLink + content.value.substring(end);
     
-    // 延迟 10ms 等待 Vue 渲染完成，然后自动框选 "输入标题" 四个字
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + 1, start + 5);
-    }, 10);
+    // 4. 强制等待 Vue 把数据更新到实际的 DOM 输入框中（专治移动端延时报错）
+    await nextTick();
+    
+    // 5. 光标自动选中“输入标题”四个字
+    textarea.focus();
+    textarea.setSelectionRange(start + 1, start + 1 + titlePlaceholder.length);
   }
 }
 </script>
@@ -164,12 +173,10 @@ const handlePaste = (e) => {
       <input type="password" v-model="token" placeholder="输入 GitHub API Token" @blur="saveToken" />
     </div>
     
-    <!-- 全新拆分设计的路径选择器 -->
     <div class="file-config-group">
       <div class="input-wrapper folder-wrapper">
         <span class="icon">📁</span>
         <input list="folder-options" v-model="inputFolder" placeholder="目录 (如 english/)" />
-        <!-- 自动加载所有已有目录 -->
         <datalist id="folder-options">
           <option v-for="folder in existingFolders" :key="folder" :value="folder"></option>
         </datalist>
@@ -185,7 +192,6 @@ const handlePaste = (e) => {
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
-    <!-- 绑定智能粘贴事件 -->
     <textarea 
       v-model="content" 
       placeholder="# 在这里使用 Markdown 痛快地写笔记..."
@@ -216,9 +222,8 @@ textarea { width: 100%; padding: 12px; border: 1px solid var(--vp-c-divider); bo
 .btn-load:hover { background-color: var(--vp-c-divider); }
 .btn-publish { padding: 14px; background-color: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; font-size: 1.1rem; cursor: pointer; transition: background 0.2s; }
 .btn-publish:hover { background-color: #059669; }
-.status { font-size: 14px; color: var(--vp-c-text-2); text-align: center; }
+.status { font-size: 14px; color: var(--vp-c-text-2); text-align: center; margin-top: 5px; }
 
-/* 移动端竖屏适配 */
 @media (max-width: 640px) {
   .file-config-group { flex-direction: column; align-items: stretch; }
   .divider { display: none; }
