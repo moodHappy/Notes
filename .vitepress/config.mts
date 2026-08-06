@@ -1,35 +1,55 @@
 import { defineConfig } from 'vitepress'
 import fs from 'fs'
 import path from 'path'
+import { execSync } from 'child_process'
 
-// 核心引擎：自动扫描根目录下的所有文件夹，你建什么文件夹，前台就展示什么大模块！
 function getDynamicSidebar() {
   const rootPath = path.resolve(__dirname, '../')
   
-  // 1. 获取所有真实内容的文件夹（自动过滤掉隐藏配置和非文件夹）
   const folders = fs.readdirSync(rootPath).filter(file => {
     const fullPath = path.join(rootPath, file)
-    const stat = fs.statSync(fullPath)
-    return stat.isDirectory() && !file.startsWith('.') && file !== 'node_modules'
+    return fs.statSync(fullPath).isDirectory() && !file.startsWith('.') && file !== 'node_modules'
   })
 
-  // 2. 遍历这些文件夹，生成菜单
   return folders.map(folder => {
     const folderPath = path.join(rootPath, folder)
     const items = fs.readdirSync(folderPath)
       .filter(file => file.endsWith('.md') && file !== 'index.md')
       .map(file => {
         const name = file.replace(/\.md$/, '')
-        const content = fs.readFileSync(path.join(folderPath, file), 'utf-8')
+        const filePath = path.join(folderPath, file)
+        const content = fs.readFileSync(filePath, 'utf-8')
         const match = content.match(/^#\s+(.*)/m) 
+        
+        // 核心优化：直接调取 Git 底层记录，获取最真实的修改日期
+        let date = '新笔记'
+        let timestamp = Date.now()
+        try {
+          // 在 GitHub Actions 环境中抓取最后提交时间
+          const gitDate = execSync(`git log -1 --format="%ad" --date=short -- "${filePath}"`).toString().trim()
+          const gitTime = execSync(`git log -1 --format="%ct" -- "${filePath}"`).toString().trim()
+          if (gitDate) {
+             date = gitDate
+             timestamp = parseInt(gitTime) * 1000
+          }
+        } catch(e) {
+           // 如果是还没 commit 的本地文件，降级使用系统时间
+           date = new Date().toISOString().split('T')[0]
+        }
+
         return { 
           text: match ? match[1].trim() : name, 
-          link: `/${folder}/${name}` 
+          link: `/${folder}/${name}`,
+          date: date,
+          timestamp: timestamp
         }
       })
-    // 返回模块名称和它里面的笔记列表
+      // 核心优化：把最新写的、最近改的笔记永远排在最前面！
+      .sort((a, b) => b.timestamp - a.timestamp)
+
+    // 默认折叠状态设为 false，但在我们的新版前台组件里会用 details 控制
     return { text: folder, items, collapsed: false }
-  })
+  }).filter(folder => folder.items.length > 0) // 自动隐藏空文件夹
 }
 
 export default defineConfig({
@@ -43,10 +63,7 @@ export default defineConfig({
       { text: '📚 笔记目录', link: '/directory' },
       { text: '✍️ 写作台', link: '/write' }
     ],
-
-    // 调用引擎，以后你的大模块全靠前台自由发挥
     sidebar: getDynamicSidebar(),
-
     socialLinks: [{ icon: 'github', link: 'https://github.com/moodHappy/Notes' }],
     search: { provider: 'local' }
   }
