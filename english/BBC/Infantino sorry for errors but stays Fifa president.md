@@ -1,3 +1,6 @@
+[Infantino sorry for errors but stays Fifa president](https://www.bbc.com/sport/football/articles/clyq3el5gkqo)
+
+
 ### 📌 完整翻译
 
 因凡蒂诺为错误表示道歉，但仍继续担任国际足联主席。
