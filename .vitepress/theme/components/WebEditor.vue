@@ -10,31 +10,44 @@ const content = ref('')
 const statusMsg = ref('')
 const textareaRef = ref(null)
 
-// 本地历史目录与自定义下拉菜单状态
+// 状态管理：本地历史、隐藏黑名单、下拉菜单开关
 const localUsedFolders = ref([])
+const hiddenFolders = ref([])
 const showFolderDropdown = ref(false)
 
 onMounted(() => {
   const savedToken = localStorage.getItem('gh_api_token')
   if (savedToken) token.value = savedToken
   
+  // 读取历史记录和被红叉删除的黑名单
   const savedFolders = localStorage.getItem('vp_used_folders')
-  if (savedFolders) {
-    localUsedFolders.value = JSON.parse(savedFolders)
-  }
+  if (savedFolders) localUsedFolders.value = JSON.parse(savedFolders)
+  
+  const savedHidden = localStorage.getItem('vp_hidden_folders')
+  if (savedHidden) hiddenFolders.value = JSON.parse(savedHidden)
+  
+  // 读取最后一次成功发布的目录，作为默认值
+  const savedDefault = localStorage.getItem('vp_default_folder')
   
   const urlParams = new URLSearchParams(window.location.search)
   let pathParam = urlParams.get('path')
   
   if (pathParam) {
+     // 如果是从目录点击“编辑”进来的，解析原有路径
      pathParam = pathParam.replace(/^\//, '')
      const parts = pathParam.split('/')
      inputFile.value = parts.pop()
      inputFolder.value = parts.length > 0 ? parts.join('/') + '/' : ''
      loadExistingNote()
+  } else {
+     // 全新写作：自动填入最近一次使用的目录作为默认
+     if (savedDefault) {
+       inputFolder.value = savedDefault
+     }
   }
 })
 
+// 计算属性：融合云端真实目录 + 本地历史目录，并过滤掉被删掉的黑名单
 const existingFolders = computed(() => {
   const folders = new Set(localUsedFolders.value)
   const traverse = (nodes) => {
@@ -52,13 +65,38 @@ const existingFolders = computed(() => {
     })
   }
   traverse(theme.value.sidebar)
-  return Array.from(folders).sort()
+  
+  return Array.from(folders)
+    .filter(f => !hiddenFolders.value.includes(f))
+    .sort()
 })
 
-// 下拉菜单选择逻辑
+// 点击列表项：选择目录
 const selectFolder = (folderName) => {
   inputFolder.value = folderName
   showFolderDropdown.value = false
+}
+
+// 核心功能：点击红叉删除目录记录
+const removeFolder = (folderName, event) => {
+  // 阻止事件冒泡，防止触发 selectFolder
+  event.stopPropagation() 
+  
+  // 从本地历史中移除
+  localUsedFolders.value = localUsedFolders.value.filter(f => f !== folderName)
+  localStorage.setItem('vp_used_folders', JSON.stringify(localUsedFolders.value))
+  
+  // 加入黑名单（这样连云端抓取过来的同名目录也会在下拉框里消失）
+  if (!hiddenFolders.value.includes(folderName)) {
+    hiddenFolders.value.push(folderName)
+    localStorage.setItem('vp_hidden_folders', JSON.stringify(hiddenFolders.value))
+  }
+  
+  // 如果删掉的正好是当前的默认目录，则清空默认状态
+  if (localStorage.getItem('vp_default_folder') === folderName) {
+    localStorage.removeItem('vp_default_folder')
+    if (inputFolder.value === folderName) inputFolder.value = ''
+  }
 }
 
 const saveToken = () => {
@@ -142,11 +180,25 @@ const publishNote = async () => {
     if (putRes.ok) {
       statusMsg.value = '✅ 发布成功！约1分钟后刷新页面生效。'
       
+      // 成功发布后：更新默认目录和历史列表
       let folderStr = inputFolder.value.trim().replace(/^\/+/, '')
       if (folderStr && !folderStr.endsWith('/')) folderStr += '/'
-      if (folderStr && !localUsedFolders.value.includes(folderStr)) {
-        localUsedFolders.value.push(folderStr)
-        localStorage.setItem('vp_used_folders', JSON.stringify(localUsedFolders.value))
+      
+      if (folderStr) {
+        // 1. 设置为下一次打开时的默认目录
+        localStorage.setItem('vp_default_folder', folderStr)
+        
+        // 2. 存入历史记录
+        if (!localUsedFolders.value.includes(folderStr)) {
+          localUsedFolders.value.push(folderStr)
+          localStorage.setItem('vp_used_folders', JSON.stringify(localUsedFolders.value))
+        }
+        
+        // 3. 如果这个目录曾经被红叉删掉过，将其从黑名单“复活”
+        if (hiddenFolders.value.includes(folderStr)) {
+          hiddenFolders.value = hiddenFolders.value.filter(f => f !== folderStr)
+          localStorage.setItem('vp_hidden_folders', JSON.stringify(hiddenFolders.value))
+        }
       }
       
     } else {
@@ -158,7 +210,7 @@ const publishNote = async () => {
   }
 }
 
-// ====== Markdown 工具栏引擎 ======
+// Markdown 工具栏引擎
 const insertMarkdown = (prefix, suffix = '') => {
   const textarea = textareaRef.value
   if (!textarea) return
@@ -204,7 +256,7 @@ const insertLink = () => {
     </div>
     
     <div class="file-config-group">
-      <!-- 手写高级下拉菜单组件 -->
+      <!-- 带红叉的自定义下拉菜单 -->
       <div class="input-wrapper folder-wrapper" :class="{ 'dropdown-active': showFolderDropdown }">
         <span class="icon">📁</span>
         <input 
@@ -212,12 +264,10 @@ const insertLink = () => {
           placeholder="输入或选择目录" 
           @focus="showFolderDropdown = true"
         />
-        <!-- 下拉开关按钮 -->
         <button class="dropdown-toggle" @click.stop="showFolderDropdown = !showFolderDropdown">
           ▼
         </button>
         
-        <!-- 悬浮菜单本体 -->
         <div v-if="showFolderDropdown" class="dropdown-menu">
           <div 
             v-for="folder in existingFolders" 
@@ -225,13 +275,13 @@ const insertLink = () => {
             class="dropdown-item" 
             @click.stop="selectFolder(folder)"
           >
-            {{ folder }}
+            <span class="dropdown-item-text">{{ folder }}</span>
+            <span class="dropdown-item-delete" @click.stop="removeFolder(folder, $event)" title="从列表中移除">✕</span>
           </div>
-          <div v-if="existingFolders.length === 0" class="dropdown-item empty">暂无历史目录</div>
+          <div v-if="existingFolders.length === 0" class="dropdown-item empty">暂无可用目录</div>
         </div>
       </div>
       
-      <!-- 全屏透明遮罩：点击菜单外任意区域自动收起菜单 -->
       <div v-if="showFolderDropdown" class="dropdown-overlay" @click.stop="showFolderDropdown = false"></div>
       
       <span class="divider">/</span>
@@ -279,21 +329,22 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .file-config-group { display: flex; align-items: center; gap: 8px; position: relative; }
 .input-wrapper { display: flex; align-items: center; background: var(--vp-c-bg-soft); border: 1px solid var(--vp-c-divider); border-radius: 8px; padding: 10px; position: relative; }
 
-/* 目录选择框高优先级层级，确保弹出的菜单不会被底下的文本框遮挡 */
 .folder-wrapper { flex: 1.2; z-index: 20; }
 .file-wrapper { flex: 2; z-index: 1; }
 .icon { margin-right: 8px; filter: grayscale(100%); font-size: 1.1rem; }
 .divider { font-size: 1.5rem; color: var(--vp-c-divider); font-weight: 300; }
 
-/* 自定义下拉菜单样式 */
+/* 自定义下拉菜单与红叉样式 */
 .dropdown-toggle { background: transparent; border: none; font-size: 0.8rem; color: var(--vp-c-text-3); cursor: pointer; padding: 0 4px; display: flex; align-items: center; justify-content: center; }
 .dropdown-menu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--vp-c-bg); border: 1px solid var(--vp-c-divider); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); max-height: 220px; overflow-y: auto; padding: 6px 0; z-index: 30; }
-.dropdown-item { padding: 10px 16px; font-size: 0.95rem; color: var(--vp-c-text-1); cursor: pointer; transition: background 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dropdown-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: 0.95rem; color: var(--vp-c-text-1); cursor: pointer; transition: background 0.2s; }
 .dropdown-item:hover { background: var(--vp-c-bg-soft); color: var(--vp-c-brand); }
+.dropdown-item-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dropdown-item-delete { color: #ef4444; font-size: 1.1rem; padding: 2px 6px; margin-left: 12px; border-radius: 4px; transition: background 0.2s; }
+.dropdown-item-delete:hover { background: #fee2e2; color: #dc2626; }
 .dropdown-item.empty { color: var(--vp-c-text-3); cursor: default; }
 .dropdown-item.empty:hover { background: transparent; color: var(--vp-c-text-3); }
 
-/* 透明全屏遮罩，点击任意区域关闭菜单 */
 .dropdown-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10; cursor: default; }
 
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
