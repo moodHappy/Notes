@@ -277,9 +277,8 @@ const insertLink = () => {
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
-    <!-- 核心区域：彻底解除 overflow 限制，赋予工具栏吸顶能力 -->
     <div class="editor-box">
-      <!-- 吸顶工具栏 -->
+      <!-- 核心区域：高度优化过的吸顶工具栏 -->
       <div class="toolbar">
         <button @click="insertLink" title="插入链接">🔗 链接</button>
         <div class="toolbar-divider"></div>
@@ -306,6 +305,7 @@ const insertLink = () => {
   </div>
 </template>
 
+<!-- 这是局部样式 -->
 <style scoped>
 .editor-container { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; position: relative; }
 input { width: 100%; border: none; outline: none; background: transparent; font-size: 16px; color: var(--vp-c-text-1); }
@@ -335,33 +335,33 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
 .btn-load:hover { background-color: var(--vp-c-divider); }
 
-/* 删除了 overflow: hidden，释放 sticky 封印 */
 .editor-box { border: 1px solid var(--vp-c-divider); border-radius: 8px; background: var(--vp-c-bg-soft); display: flex; flex-direction: column; z-index: 1; position: relative; }
 
-/* 核心优化：赋予工具栏吸顶能力 */
+/* 核心优化：完美避开 VitePress 导航栏的吸顶效果 */
 .toolbar { 
   position: -webkit-sticky; 
   position: sticky; 
-  top: 0; /* 在可视区域顶部自动悬浮 */
-  z-index: 15; /* 保证它压在正文文本上方 */
+  /* 让开 VitePress 固定的顶部导航栏（通常是 64px） */
+  top: var(--vp-nav-height, 64px); 
+  z-index: 15; /* 高于文本，低于下拉框 */
   display: flex; 
   align-items: center; 
   gap: 4px; 
   padding: 8px; 
   background: var(--vp-c-bg-mute); 
-  backdrop-filter: blur(8px); /* 给吸顶加上高级的毛玻璃效果 */
   border-bottom: 1px solid var(--vp-c-divider); 
-  border-radius: 8px 8px 0 0; /* 保持顶部圆角 */
+  border-radius: 8px 8px 0 0; 
   overflow-x: auto; 
   white-space: nowrap; 
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* 悬浮时的阴影切割感 */
+  /* 悬浮时的投影边缘，增强视觉隔离感 */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
 }
 
 .toolbar button { padding: 6px 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: 15px; color: var(--vp-c-text-1); cursor: pointer; transition: all 0.2s; }
 .toolbar button:hover { background: var(--vp-c-bg-soft); border-color: var(--vp-c-divider); }
 .toolbar-divider { width: 1px; height: 20px; background-color: var(--vp-c-divider); margin: 0 4px; }
 
-textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 16px; box-sizing: border-box; height: 55vh; resize: vertical; font-family: monospace; background: transparent; color: var(--vp-c-text-1); border-radius: 0 0 8px 8px; }
+textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 16px; box-sizing: border-box; height: 60vh; resize: vertical; font-family: monospace; background: transparent; color: var(--vp-c-text-1); border-radius: 0 0 8px 8px; }
 
 .btn-publish { padding: 14px; background-color: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; font-size: 1.1rem; cursor: pointer; transition: background 0.2s; }
 .btn-publish:hover { background-color: #059669; }
@@ -371,5 +371,12 @@ textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 1
   .file-config-group { flex-direction: column; align-items: stretch; }
   .divider { display: none; }
   .folder-wrapper { z-index: 20; }
+}
+</style>
+
+<!-- 这是全局样式：暴力破开一切影响 sticky 效果的封印 -->
+<style>
+.vp-doc, .vp-doc > div, .vp-doc > div > div {
+  overflow: visible !important;
 }
 </style>
