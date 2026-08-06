@@ -20,14 +20,6 @@ const onToggle = (e) => {
     }
   }
 }
-
-// 终极修复：彻底屏蔽 SPA 路由劫持，并适配 GitHub Pages 后缀规则
-const forceReloadNavigate = (link) => {
-  // 1. 强行补齐 .html 后缀，确保物理跳转时 GitHub Pages 服务器能找到真实文件，不报 404
-  const targetUrl = withBase(link + '.html')
-  // 2. 直接调用浏览器底层 API 进行物理强制重载
-  window.location.assign(targetUrl)
-}
 </script>
 
 <template>
@@ -57,8 +49,8 @@ const forceReloadNavigate = (link) => {
     </details>
 
     <div v-else class="note-row">
-      <!-- 核心修正：加入 .stop 强行切断冒泡，不给 VitePress 拦截器任何可乘之机 -->
-      <a :href="withBase(node.link)" class="note-link" @click.stop.prevent="forceReloadNavigate(node.link)">
+      <!-- 终极优雅解法：用 target="_top" 触发原生跳转，不挂载任何冗余历史记录，完美唤醒插件 -->
+      <a :href="withBase(node.link)" target="_top" class="note-link">
         <span class="note-icon">📄</span>
         <span class="note-name">{{ node.text }}</span>
         <span class="note-date">{{ node.date }}</span>
