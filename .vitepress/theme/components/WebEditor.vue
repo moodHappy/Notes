@@ -9,7 +9,7 @@ const inputFile = ref('')
 const content = ref('')
 const statusMsg = ref('')
 
-// 自动抓取全局已存在的文件夹目录
+// 自动抓取已有文件夹供下拉选择
 const existingFolders = computed(() => {
   const folders = new Set()
   const traverse = (nodes) => {
@@ -64,7 +64,7 @@ const loadExistingNote = async () => {
   }
   if (!inputFile.value.trim()) return
 
-  statusMsg.value = '⏳ 正在从云端拉取...'
+  statusMsg.value = '⏳ 正在拉取云端笔记...'
   const finalPath = getFullPath()
   
   try {
@@ -76,7 +76,7 @@ const loadExistingNote = async () => {
        content.value = base64ToUtf8(data.content)
        statusMsg.value = '✅ 笔记加载成功！'
     } else {
-       statusMsg.value = '🆕 这是一个新笔记。'
+       statusMsg.value = '🆕 这是一个新笔记路径。'
     }
   } catch (e) {
      statusMsg.value = `❌ 读取失败: ${e.message}`
@@ -105,7 +105,7 @@ const publishNote = async () => {
     }
 
     const body = {
-      message: `前台更新笔记: ${finalPath}`,
+      message: `更新笔记: ${finalPath}`,
       content: utf8ToBase64(content.value),
     }
     if (sha) body.sha = sha 
@@ -120,31 +120,30 @@ const publishNote = async () => {
     })
 
     if (putRes.ok) {
-      statusMsg.value = '✅ 发布成功！约 1 分钟后刷新页面生效。'
+      statusMsg.value = '✅ 发布成功！约1分钟后重载页面即可生效。'
     } else {
       const errorData = await putRes.json()
       statusMsg.value = `❌ 发布失败: ${errorData.message}`
     }
   } catch (err) {
-    statusMsg.value = `❌ 网络请求出错: ${err.message}`
+    statusMsg.value = `❌ 网络出错: ${err.message}`
   }
 }
 
-// 核心修复：移动端强力拦截与格式化机制
+// 终极修复方案：针对安卓与各类移动端浏览器的强力粘贴接管
 const handlePaste = async (e) => {
-  // 1. 兼容移动端的剪贴板文本抓取
-  let pastedText = ''
-  if (e.clipboardData && e.clipboardData.getData) {
-    pastedText = e.clipboardData.getData('text/plain')
-  } else if (window.clipboardData && window.clipboardData.getData) {
-    pastedText = window.clipboardData.getData('Text')
-  }
-  pastedText = pastedText.trim()
+  const clipboardData = e.clipboardData || window.clipboardData;
+  if (!clipboardData) return;
 
-  const urlRegex = /^https?:\/\/[^\s]+$/;
+  // 绝招 1：废弃单纯的 text/plain，使用多级降级取值，专治部分安卓机型不给值的问题
+  let pastedText = clipboardData.getData('text') || clipboardData.getData('text/plain') || '';
+  pastedText = pastedText.trim();
+
+  // 严谨匹配纯正的 HTTP 链接，中间不能带空格
+  const urlRegex = /^https?:\/\/[^\s]+$/i;
   
   if (urlRegex.test(pastedText)) {
-    // 2. 强行掐断浏览器的原生粘贴行为，防止裸链接上屏
+    // 绝招 2：立刻掐断系统原生粘贴，防止裸链接跑上屏幕
     e.preventDefault(); 
     
     const textarea = e.target;
@@ -154,15 +153,16 @@ const handlePaste = async (e) => {
     const titlePlaceholder = "输入标题";
     const mdLink = `[${titlePlaceholder}](${pastedText})`;
     
-    // 3. 将格式化后的内容写入 Vue 模型
+    // 直接操作 Vue 数据，完成替换
     content.value = content.value.substring(0, start) + mdLink + content.value.substring(end);
     
-    // 4. 强制等待 Vue 把数据更新到实际的 DOM 输入框中（专治移动端延时报错）
+    // 绝招 3：移动端专属的双重锁帧。必须等 DOM 刷新完，再加上额外的延时，才能在软键盘弹出的情况下强行抓住光标！
     await nextTick();
-    
-    // 5. 光标自动选中“输入标题”四个字
-    textarea.focus();
-    textarea.setSelectionRange(start + 1, start + 1 + titlePlaceholder.length);
+    setTimeout(() => {
+      textarea.focus();
+      // 精确框选“输入标题”这四个字，方便直接打字替换
+      textarea.setSelectionRange(start + 1, start + 1 + titlePlaceholder.length);
+    }, 80);
   }
 }
 </script>
