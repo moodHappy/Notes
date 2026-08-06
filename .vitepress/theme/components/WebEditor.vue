@@ -79,20 +79,16 @@ const selectFolder = (folderName) => {
 
 // 核心功能：点击红叉删除目录记录
 const removeFolder = (folderName, event) => {
-  // 阻止事件冒泡，防止触发 selectFolder
   event.stopPropagation() 
   
-  // 从本地历史中移除
   localUsedFolders.value = localUsedFolders.value.filter(f => f !== folderName)
   localStorage.setItem('vp_used_folders', JSON.stringify(localUsedFolders.value))
   
-  // 加入黑名单（这样连云端抓取过来的同名目录也会在下拉框里消失）
   if (!hiddenFolders.value.includes(folderName)) {
     hiddenFolders.value.push(folderName)
     localStorage.setItem('vp_hidden_folders', JSON.stringify(hiddenFolders.value))
   }
   
-  // 如果删掉的正好是当前的默认目录，则清空默认状态
   if (localStorage.getItem('vp_default_folder') === folderName) {
     localStorage.removeItem('vp_default_folder')
     if (inputFolder.value === folderName) inputFolder.value = ''
@@ -180,21 +176,17 @@ const publishNote = async () => {
     if (putRes.ok) {
       statusMsg.value = '✅ 发布成功！约1分钟后刷新页面生效。'
       
-      // 成功发布后：更新默认目录和历史列表
       let folderStr = inputFolder.value.trim().replace(/^\/+/, '')
       if (folderStr && !folderStr.endsWith('/')) folderStr += '/'
       
       if (folderStr) {
-        // 1. 设置为下一次打开时的默认目录
         localStorage.setItem('vp_default_folder', folderStr)
         
-        // 2. 存入历史记录
         if (!localUsedFolders.value.includes(folderStr)) {
           localUsedFolders.value.push(folderStr)
           localStorage.setItem('vp_used_folders', JSON.stringify(localUsedFolders.value))
         }
         
-        // 3. 如果这个目录曾经被红叉删掉过，将其从黑名单“复活”
         if (hiddenFolders.value.includes(folderStr)) {
           hiddenFolders.value = hiddenFolders.value.filter(f => f !== folderStr)
           localStorage.setItem('vp_hidden_folders', JSON.stringify(hiddenFolders.value))
@@ -256,7 +248,6 @@ const insertLink = () => {
     </div>
     
     <div class="file-config-group">
-      <!-- 带红叉的自定义下拉菜单 -->
       <div class="input-wrapper folder-wrapper" :class="{ 'dropdown-active': showFolderDropdown }">
         <span class="icon">📁</span>
         <input 
@@ -295,6 +286,7 @@ const insertLink = () => {
     </div>
 
     <div class="editor-box">
+      <!-- 快捷工具栏，已加入强力的分隔符功能 -->
       <div class="toolbar">
         <button @click="insertLink" title="插入链接">🔗 链接</button>
         <div class="toolbar-divider"></div>
@@ -304,6 +296,7 @@ const insertLink = () => {
         <div class="toolbar-divider"></div>
         <button @click="insertMarkdown('> ', '')" title="引用">❞</button>
         <button @click="insertMarkdown('\n```\n', '\n```\n')" title="代码块">&lt;&gt;</button>
+        <button @click="insertMarkdown('\n---\n\n', '')" title="分隔符">---</button>
       </div>
       
       <textarea 
@@ -334,7 +327,6 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .icon { margin-right: 8px; filter: grayscale(100%); font-size: 1.1rem; }
 .divider { font-size: 1.5rem; color: var(--vp-c-divider); font-weight: 300; }
 
-/* 自定义下拉菜单与红叉样式 */
 .dropdown-toggle { background: transparent; border: none; font-size: 0.8rem; color: var(--vp-c-text-3); cursor: pointer; padding: 0 4px; display: flex; align-items: center; justify-content: center; }
 .dropdown-menu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--vp-c-bg); border: 1px solid var(--vp-c-divider); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); max-height: 220px; overflow-y: auto; padding: 6px 0; z-index: 30; }
 .dropdown-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: 0.95rem; color: var(--vp-c-text-1); cursor: pointer; transition: background 0.2s; }
