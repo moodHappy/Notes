@@ -1,66 +1,45 @@
 import { defineConfig } from 'vitepress'
+import fs from 'fs'
+import path from 'path'
+
+// 核心黑科技：自动读取文件夹，提取你笔记里的第一个 # 标题作为显示名字
+function getAutoSidebar(dir, title) {
+  const fullPath = path.resolve(__dirname, '../', dir)
+  if (!fs.existsSync(fullPath)) return { text: title, items: [] }
+  
+  const items = fs.readdirSync(fullPath)
+    .filter(file => file.endsWith('.md') && file !== 'index.md')
+    .map(file => {
+      const name = file.replace(/\.md$/, '')
+      const content = fs.readFileSync(path.join(fullPath, file), 'utf-8')
+      const match = content.match(/^#\s+(.*)/m) 
+      return { 
+        text: match ? match[1].trim() : name, 
+        link: `/${dir}/${name}` 
+      }
+    })
+  return { text: title, items, collapsed: false }
+}
 
 export default defineConfig({
   title: "My Digital Garden",
   description: "记录技术、英语与生活",
-  // 这里的 base 必须和你的 GitHub 仓库名大小写完全一致，用来修复样式彻底丢失的问题
   base: '/Notes/', 
   
   themeConfig: {
-    // 顶部导航栏
     nav: [
       { text: '首页', link: '/' },
-      { text: '英语精读', link: '/english/' },
-      { text: '脚本与工具', link: '/scripts/' },
-      { text: '阅读笔记', link: '/literature/' },
-      { text: '✍️ 前台工作台', link: '/write' } // 点击直接进入网页端沉浸式写作
+      { text: '📚 笔记目录', link: '/directory' },
+      { text: '✍️ 写作台', link: '/write' }
     ],
 
-    // 左侧边栏菜单结构
-    sidebar: {
-      '/english/': [
-        {
-          text: '英语学习与分析',
-          items: [
-            { text: '长难句拆解', link: '/english/sentence-breakdowns' },
-            { text: '词汇与 Anki 卡片', link: '/english/vocabulary-anki' }
-          ]
-        }
-      ],
-      '/scripts/': [
-        {
-          text: '前端与自动化脚本',
-          items: [
-            { text: 'Tampermonkey 脚本', link: '/scripts/tampermonkey' },
-            { text: '阅读界面优化', link: '/scripts/reading-interface' }
-          ]
-        }
-      ],
-      '/literature/': [
-        {
-          text: '经典文学摘录',
-          items: [
-            { text: '百年孤独', link: '/literature/one-hundred-years-of-solitude' },
-            { text: '小王子', link: '/literature/the-little-prince' }
-          ]
-        }
-      ]
-    },
-
-    // 右上角社交链接，直接指向你的 GitHub 仓库
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/moodHappy/Notes' }
+    // 将菜单改为全局自动生成！
+    sidebar: [
+      getAutoSidebar('english', '🇬🇧 英语精读与分析'),
+      getAutoSidebar('scripts', '💻 前端与自动化脚本'),
+      getAutoSidebar('literature', '📖 经典文学摘录')
     ],
 
-    // 底部版权信息
-    footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2026-present moodHappy'
-    },
-
-    // 顺手帮你开启了全局本地搜索功能，方便在前台查笔记
-    search: {
-      provider: 'local'
-    }
+    socialLinks: [{ icon: 'github', link: 'https://github.com/moodHappy/Notes' }]
   }
 })
