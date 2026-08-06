@@ -1,6 +1,5 @@
 <script>
 import { reactive } from 'vue'
-// 全局状态：保持你的文件夹展开记忆
 const folderState = reactive(JSON.parse(typeof localStorage !== 'undefined' ? localStorage.getItem('vp_folder_state') || '{}' : '{}'))
 </script>
 
@@ -12,7 +11,6 @@ const props = defineProps({
 })
 const emit = defineEmits(['edit', 'delete'])
 
-// 监听文件夹点击，保持展开状态
 const onToggle = (e) => {
   if (props.node.items) {
     const id = props.node.id || props.node.text
@@ -23,10 +21,12 @@ const onToggle = (e) => {
   }
 }
 
-// 核心修复：强制浏览器物理跳转，打破 SPA 路由劫持，唤醒翻译脚本
-const forceReloadNavigate = (e, link) => {
-  e.preventDefault() // 阻止 Vue Router 的默认拦截行为
-  window.location.href = withBase(link) // 直接操控浏览器顶层对象进行真实的页面刷新跳转
+// 终极修复：彻底屏蔽 SPA 路由劫持，并适配 GitHub Pages 后缀规则
+const forceReloadNavigate = (link) => {
+  // 1. 强行补齐 .html 后缀，确保物理跳转时 GitHub Pages 服务器能找到真实文件，不报 404
+  const targetUrl = withBase(link + '.html')
+  // 2. 直接调用浏览器底层 API 进行物理强制重载
+  window.location.assign(targetUrl)
 }
 </script>
 
@@ -57,8 +57,8 @@ const forceReloadNavigate = (e, link) => {
     </details>
 
     <div v-else class="note-row">
-      <!-- 在 a 标签加上 @click 强行接管跳转逻辑 -->
-      <a :href="withBase(node.link)" class="note-link" @click="forceReloadNavigate($event, node.link)">
+      <!-- 核心修正：加入 .stop 强行切断冒泡，不给 VitePress 拦截器任何可乘之机 -->
+      <a :href="withBase(node.link)" class="note-link" @click.stop.prevent="forceReloadNavigate(node.link)">
         <span class="note-icon">📄</span>
         <span class="note-name">{{ node.text }}</span>
         <span class="note-date">{{ node.date }}</span>
