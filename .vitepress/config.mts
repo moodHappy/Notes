@@ -18,7 +18,6 @@ function getDynamicSidebar(dirPath, basePath = '') {
     const stat = fs.statSync(fullPath);
     
     if (stat.isDirectory()) {
-      // 核心修正 1：生成文件夹唯一标识 id，交给前端用来“记住”展开状态
       const folderId = `${basePath}${file}/`;
       const subItems = getDynamicSidebar(fullPath, folderId);
       if (subItems.length > 0) {
@@ -29,13 +28,28 @@ function getDynamicSidebar(dirPath, basePath = '') {
       const content = fs.readFileSync(fullPath, 'utf-8');
       const match = content.match(/^#\s+(.*)/m);
       
-      let date = '新笔记';
+      let date = '';
       let timestamp = Date.now();
+      
+      // 核心修复：完善 Git 时间抓取与本地文件系统时间的 fallback 机制
       try {
         const gitDate = execSync(`git log -1 --format="%ad" --date=short -- "${fullPath}"`).toString().trim();
         const gitTime = execSync(`git log -1 --format="%ct" -- "${fullPath}"`).toString().trim();
-        if (gitDate) { date = gitDate; timestamp = parseInt(gitTime) * 1000; }
-      } catch(e) { date = new Date().toISOString().split('T')[0]; }
+        
+        if (gitDate) {
+          // 如果 Git 有记录，使用绝对准确的 Git 提交时间
+          date = gitDate;
+          timestamp = parseInt(gitTime) * 1000;
+        } else {
+          // 刚创建还没被 Git 索引的新文件，git log 会返回空，此时果断使用系统底层的文件修改时间
+          date = stat.mtime.toISOString().split('T')[0];
+          timestamp = stat.mtime.getTime();
+        }
+      } catch(e) {
+        // 如果连 git 环境都没有（或者执行报错），同样兜底到系统文件时间
+        date = stat.mtime.toISOString().split('T')[0];
+        timestamp = stat.mtime.getTime();
+      }
 
       items.push({
         text: match ? match[1].trim() : name,
@@ -66,7 +80,7 @@ export default defineConfig({
     ],
     sidebar: getDynamicSidebar(path.resolve(__dirname, '../')),
     
-    // 核心修正 2：彻底屏蔽底部画蛇添足的“上一篇/下一篇”按钮
+    // 屏蔽底部多余的上一篇/下一篇
     docFooter: { prev: false, next: false },
     
     socialLinks: [{ icon: 'github', link: 'https://github.com/moodHappy/Notes' }],
