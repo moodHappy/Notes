@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
-import { useData } from 'vitepress'
+// 核心引入 withBase 路由工具，用于成功后的秒跳
+import { useData, withBase } from 'vitepress'
 
 const { theme } = useData()
 const token = ref('')
@@ -120,7 +121,7 @@ const loadExistingNote = async () => {
     if (res.ok) {
        const data = await res.json()
        content.value = base64ToUtf8(data.content)
-       statusMsg.value = '✅ 笔记加载成功！'
+       statusMsg.value = '✅ 笔记拉取成功！'
     } else {
        statusMsg.value = '🆕 这是一个新笔记。'
     }
@@ -166,8 +167,7 @@ const publishNote = async () => {
     })
 
     if (putRes.ok) {
-      statusMsg.value = '✅ 发布成功！约1分钟后刷新页面生效。'
-      
+      // 成功发布后：静默处理目录记忆
       let folderStr = inputFolder.value.trim().replace(/^\/+/, '')
       if (folderStr && !folderStr.endsWith('/')) folderStr += '/'
       
@@ -184,6 +184,9 @@ const publishNote = async () => {
           localStorage.setItem('vp_hidden_folders', JSON.stringify(hiddenFolders.value))
         }
       }
+      
+      // 核心优化：彻底干掉提示语，直接强行跳转回分类目录页！
+      window.location.href = withBase('/directory')
       
     } else {
       const errorData = await putRes.json()
@@ -276,7 +279,6 @@ const insertLink = () => {
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
-    <!-- 还原为静态布局，采用“三明治结构” -->
     <div class="editor-box">
       <!-- 顶部工具栏 -->
       <div class="toolbar top-toolbar">
@@ -297,7 +299,7 @@ const insertLink = () => {
         placeholder="# 在这里使用 Markdown 痛快地写笔记..."
       ></textarea>
 
-      <!-- 底部工具栏（新增） -->
+      <!-- 底部工具栏 -->
       <div class="toolbar bottom-toolbar">
         <button @click="insertLink" title="插入链接">🔗 链接</button>
         <div class="toolbar-divider"></div>
@@ -313,6 +315,7 @@ const insertLink = () => {
     
     <div class="actions">
       <button @click="publishNote" class="btn-publish">🚀 保存 / 更新笔记</button>
+      <!-- 保留 statusMsg 用于显示拉取提示或网络错误信息 -->
       <div class="status">{{ statusMsg }}</div>
     </div>
   </div>
@@ -347,7 +350,6 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
 .btn-load:hover { background-color: var(--vp-c-divider); }
 
-/* 恢复静态布局，去掉 sticky */
 .editor-box { 
   border: 1px solid var(--vp-c-divider); 
   border-radius: 8px; 
