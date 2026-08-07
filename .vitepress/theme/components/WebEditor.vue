@@ -194,7 +194,6 @@ const publishNote = async () => {
   }
 }
 
-// Markdown 工具栏引擎
 const insertMarkdown = (prefix, suffix = '') => {
   const textarea = textareaRef.value
   if (!textarea) return
@@ -277,9 +276,10 @@ const insertLink = () => {
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
+    <!-- 还原为静态布局，采用“三明治结构” -->
     <div class="editor-box">
-      <!-- 核心区域：高度优化过的吸顶工具栏 -->
-      <div class="toolbar">
+      <!-- 顶部工具栏 -->
+      <div class="toolbar top-toolbar">
         <button @click="insertLink" title="插入链接">🔗 链接</button>
         <div class="toolbar-divider"></div>
         <button @click="insertMarkdown('**', '**')" title="粗体"><b>B</b></button>
@@ -296,6 +296,19 @@ const insertLink = () => {
         v-model="content" 
         placeholder="# 在这里使用 Markdown 痛快地写笔记..."
       ></textarea>
+
+      <!-- 底部工具栏（新增） -->
+      <div class="toolbar bottom-toolbar">
+        <button @click="insertLink" title="插入链接">🔗 链接</button>
+        <div class="toolbar-divider"></div>
+        <button @click="insertMarkdown('**', '**')" title="粗体"><b>B</b></button>
+        <button @click="insertMarkdown('*', '*')" title="斜体"><i>I</i></button>
+        <button @click="insertMarkdown('## ', '')" title="标题">#️⃣</button>
+        <div class="toolbar-divider"></div>
+        <button @click="insertMarkdown('> ', '')" title="引用">❞</button>
+        <button @click="insertMarkdown('\n```\n', '\n```\n')" title="代码块">&lt;&gt;</button>
+        <button @click="insertMarkdown('\n---\n\n', '')" title="分隔符">---</button>
+      </div>
     </div>
     
     <div class="actions">
@@ -305,7 +318,6 @@ const insertLink = () => {
   </div>
 </template>
 
-<!-- 这是局部样式 -->
 <style scoped>
 .editor-container { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; position: relative; }
 input { width: 100%; border: none; outline: none; background: transparent; font-size: 16px; color: var(--vp-c-text-1); }
@@ -335,33 +347,47 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
 .btn-load:hover { background-color: var(--vp-c-divider); }
 
-.editor-box { border: 1px solid var(--vp-c-divider); border-radius: 8px; background: var(--vp-c-bg-soft); display: flex; flex-direction: column; z-index: 1; position: relative; }
+/* 恢复静态布局，去掉 sticky */
+.editor-box { 
+  border: 1px solid var(--vp-c-divider); 
+  border-radius: 8px; 
+  background: var(--vp-c-bg-soft); 
+  display: flex; 
+  flex-direction: column; 
+  z-index: 1; 
+  position: relative; 
+  overflow: hidden;
+}
 
-/* 核心优化：完美避开 VitePress 导航栏的吸顶效果 */
 .toolbar { 
-  position: -webkit-sticky; 
-  position: sticky; 
-  /* 让开 VitePress 固定的顶部导航栏（通常是 64px） */
-  top: var(--vp-nav-height, 64px); 
-  z-index: 15; /* 高于文本，低于下拉框 */
   display: flex; 
   align-items: center; 
   gap: 4px; 
   padding: 8px; 
   background: var(--vp-c-bg-mute); 
-  border-bottom: 1px solid var(--vp-c-divider); 
-  border-radius: 8px 8px 0 0; 
   overflow-x: auto; 
   white-space: nowrap; 
-  /* 悬浮时的投影边缘，增强视觉隔离感 */
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
 }
+.top-toolbar { border-bottom: 1px solid var(--vp-c-divider); }
+.bottom-toolbar { border-top: 1px solid var(--vp-c-divider); }
 
 .toolbar button { padding: 6px 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: 15px; color: var(--vp-c-text-1); cursor: pointer; transition: all 0.2s; }
 .toolbar button:hover { background: var(--vp-c-bg-soft); border-color: var(--vp-c-divider); }
 .toolbar-divider { width: 1px; height: 20px; background-color: var(--vp-c-divider); margin: 0 4px; }
 
-textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 16px; box-sizing: border-box; height: 60vh; resize: vertical; font-family: monospace; background: transparent; color: var(--vp-c-text-1); border-radius: 0 0 8px 8px; }
+textarea { 
+  width: 100%; 
+  padding: 16px; 
+  border: none; 
+  outline: none; 
+  font-size: 16px; 
+  box-sizing: border-box; 
+  height: 55vh; 
+  resize: vertical; 
+  font-family: monospace; 
+  background: transparent; 
+  color: var(--vp-c-text-1); 
+}
 
 .btn-publish { padding: 14px; background-color: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; font-size: 1.1rem; cursor: pointer; transition: background 0.2s; }
 .btn-publish:hover { background-color: #059669; }
@@ -371,12 +397,5 @@ textarea { width: 100%; padding: 16px; border: none; outline: none; font-size: 1
   .file-config-group { flex-direction: column; align-items: stretch; }
   .divider { display: none; }
   .folder-wrapper { z-index: 20; }
-}
-</style>
-
-<!-- 这是全局样式：暴力破开一切影响 sticky 效果的封印 -->
-<style>
-.vp-doc, .vp-doc > div, .vp-doc > div > div {
-  overflow: visible !important;
 }
 </style>
