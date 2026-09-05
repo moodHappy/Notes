@@ -233,6 +233,19 @@ const insertLink = () => {
     textarea.setSelectionRange(start + 1, start + 1 + selectedText.length)
   })
 }
+
+// 新增：插入当前时间戳（年月日时分，例如202609051120）
+const insertTimestamp = () => {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  
+  const timestamp = `${yyyy}${mm}${dd}${hh}${min}`
+  inputFile.value = inputFile.value + timestamp
+}
 </script>
 
 <template>
@@ -240,7 +253,7 @@ const insertLink = () => {
     <div class="api-config">
       <input type="password" v-model="token" placeholder="输入 GitHub API Token" @blur="saveToken" />
     </div>
-    
+
     <div class="file-config-group">
       <div class="input-wrapper folder-wrapper" :class="{ 'dropdown-active': showFolderDropdown }">
         <span class="icon">📁</span>
@@ -252,7 +265,7 @@ const insertLink = () => {
         <button class="dropdown-toggle" @click.stop="showFolderDropdown = !showFolderDropdown">
           ▼
         </button>
-        
+
         <div v-if="showFolderDropdown" class="dropdown-menu">
           <div 
             v-for="folder in existingFolders" 
@@ -266,21 +279,21 @@ const insertLink = () => {
           <div v-if="existingFolders.length === 0" class="dropdown-item empty">暂无可用目录</div>
         </div>
       </div>
-      
+
       <div v-if="showFolderDropdown" class="dropdown-overlay" @click.stop="showFolderDropdown = false"></div>
-      
+
       <span class="divider">/</span>
-      
+
       <div class="input-wrapper file-wrapper">
         <span class="icon">📄</span>
         <input v-model="inputFile" placeholder="文件名" @blur="loadExistingNote" />
+        <button class="btn-timestamp" @click="insertTimestamp" title="插入当前时间戳">🕒</button>
       </div>
-      
+
       <button class="btn-load" @click="loadExistingNote">🔄 加载</button>
     </div>
 
     <div class="editor-box">
-      <!-- 顶部工具栏 -->
       <div class="toolbar top-toolbar">
         <button @click="insertLink" title="插入链接">🔗 链接</button>
         <div class="toolbar-divider"></div>
@@ -292,14 +305,13 @@ const insertLink = () => {
         <button @click="insertMarkdown('\n```\n', '\n```\n')" title="代码块">&lt;&gt;</button>
         <button @click="insertMarkdown('\n---\n\n', '')" title="分隔符">---</button>
       </div>
-      
+
       <textarea 
         ref="textareaRef"
         v-model="content" 
         placeholder="# 在这里使用 Markdown 痛快地写笔记..."
       ></textarea>
 
-      <!-- 底部工具栏 -->
       <div class="toolbar bottom-toolbar">
         <button @click="insertLink" title="插入链接">🔗 链接</button>
         <div class="toolbar-divider"></div>
@@ -312,10 +324,9 @@ const insertLink = () => {
         <button @click="insertMarkdown('\n---\n\n', '')" title="分隔符">---</button>
       </div>
     </div>
-    
+
     <div class="actions">
       <button @click="publishNote" class="btn-publish">🚀 保存 / 更新笔记</button>
-      <!-- 保留 statusMsg 用于显示拉取提示或网络错误信息 -->
       <div class="status">{{ statusMsg }}</div>
     </div>
   </div>
@@ -346,6 +357,22 @@ input { width: 100%; border: none; outline: none; background: transparent; font-
 .dropdown-item.empty:hover { background: transparent; color: var(--vp-c-text-3); }
 
 .dropdown-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10; cursor: default; }
+
+/* 新增：时间戳按钮样式 */
+.btn-timestamp {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 8px;
+  transition: opacity 0.2s, transform 0.1s;
+  opacity: 0.7;
+}
+.btn-timestamp:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
 
 .btn-load { padding: 10px 16px; background-color: var(--vp-c-bg-mute); border: 1px solid var(--vp-c-divider); border-radius: 8px; cursor: pointer; white-space: nowrap; font-weight: bold; color: var(--vp-c-text-1); transition: background 0.2s; }
 .btn-load:hover { background-color: var(--vp-c-divider); }
