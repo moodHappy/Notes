@@ -5,6 +5,9 @@ import { execSync } from 'child_process'
 
 const IGNORE_LIST = ['.git', '.github', '.vitepress', 'node_modules', 'public', 'index.md', 'README.md', 'directory.md', 'write.md']
 
+// 【核心改造】：每次 GitHub Actions 打包时，自动生成一个随机且唯一的时间戳版本号
+const BUILD_VERSION = Date.now().toString();
+
 function getDynamicSidebar(dirPath, basePath = '') {
   const items = [];
   if (!fs.existsSync(dirPath)) return items;
@@ -31,22 +34,18 @@ function getDynamicSidebar(dirPath, basePath = '') {
       let date = '';
       let timestamp = Date.now();
 
-      // 核心修复：完善 Git 时间抓取与本地文件系统时间的 fallback 机制
       try {
         const gitDate = execSync(`git log -1 --format="%ad" --date=short -- "${fullPath}"`).toString().trim();
         const gitTime = execSync(`git log -1 --format="%ct" -- "${fullPath}"`).toString().trim();
 
         if (gitDate) {
-          // 如果 Git 有记录，使用绝对准确的 Git 提交时间
           date = gitDate;
           timestamp = parseInt(gitTime) * 1000;
         } else {
-          // 刚创建还没被 Git 索引的新文件，git log 会返回空，此时果断使用系统底层的文件修改时间
           date = stat.mtime.toISOString().split('T')[0];
           timestamp = stat.mtime.getTime();
         }
       } catch(e) {
-        // 如果连 git 环境都没有（或者执行报错），同样兜底到系统文件时间
         date = stat.mtime.toISOString().split('T')[0];
         timestamp = stat.mtime.getTime();
       }
@@ -73,11 +72,40 @@ export default defineConfig({
   description: "记录技术、英语与生活",
   base: '/Notes/', 
   
-  // 新增：强制禁用浏览器缓存，解决前端更新后旧缓存导致的 404 问题
   head: [
     ['meta', { 'http-equiv': 'Cache-Control', content: 'no-cache, no-store, must-revalidate' }],
     ['meta', { 'http-equiv': 'Pragma', content: 'no-cache' }],
-    ['meta', { 'http-equiv': 'Expires', content: '0' }]
+    ['meta', { 'http-equiv': 'Expires', content: '0' }],
+    
+    // 【核心改造】：注入自动化防缓存脚本，让系统自己处理随机化，不用人操心
+    ['script', {}, `
+      (function() {
+        var latestVersion = '${BUILD_VERSION}';
+        var localVersion = localStorage.getItem('notes_cms_version');
+        
+        if (localVersion !== latestVersion) {
+          localStorage.setItem('notes_cms_version', latestVersion);
+          
+          // 精准狙击：只清理当前 Notes 目录的 Service Worker 缓存，绝对不碰你其他站点的 Cookie 和数据
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for(var i = 0; i < registrations.length; i++) {
+                if (registrations[i].scope.includes('/Notes/')) {
+                  registrations[i].unregister();
+                }
+              }
+            });
+          }
+          
+          // 自动重定向：如果当前 URL 没有带上最新的随机戳，系统自动给你加上并刷新
+          var url = new URL(window.location.href);
+          if (url.searchParams.get('v') !== latestVersion) {
+            url.searchParams.set('v', latestVersion);
+            window.location.replace(url.href); // 浏览器会自动重新拉取真实代码
+          }
+        }
+      })();
+    `]
   ],
 
   themeConfig: {
@@ -87,10 +115,7 @@ export default defineConfig({
       { text: '✍️ 写作台', link: '/write' }
     ],
     sidebar: getDynamicSidebar(path.resolve(__dirname, '../')),
-
-    // 屏蔽底部多余的上一篇/下一篇
     docFooter: { prev: false, next: false },
-
     socialLinks: [{ icon: 'github', link: 'https://github.com/moodHappy/Notes' }],
     search: { provider: 'local' }
   }
