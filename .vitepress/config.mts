@@ -5,8 +5,8 @@ import { execSync } from 'child_process'
 
 const IGNORE_LIST = ['.git', '.github', '.vitepress', 'node_modules', 'public', 'index.md', 'README.md', 'directory.md', 'write.md']
 
-// 【核心改造】：每次 GitHub Actions 打包时，自动生成一个随机且唯一的时间戳版本号
-const BUILD_VERSION = Date.now().toString();
+// 【终极核心】：每次 GitHub Actions 打包时，底层自动生成绝对不重复的核弹级时间戳
+const NUCLEAR_VERSION = Date.now().toString();
 
 function getDynamicSidebar(dirPath, basePath = '') {
   const items = [];
@@ -77,33 +77,37 @@ export default defineConfig({
     ['meta', { 'http-equiv': 'Pragma', content: 'no-cache' }],
     ['meta', { 'http-equiv': 'Expires', content: '0' }],
     
-    // 【核心改造】：注入自动化防缓存脚本，让系统自己处理随机化，不用人操心
+    // 【暴力破局】：这段脚本只要被加载一次，以后所有的缓存问题都会被它在底层自动物理超度
     ['script', {}, `
       (function() {
-        var latestVersion = '${BUILD_VERSION}';
-        var localVersion = localStorage.getItem('notes_cms_version');
-        
-        if (localVersion !== latestVersion) {
-          localStorage.setItem('notes_cms_version', latestVersion);
+        try {
+          var serverV = '${NUCLEAR_VERSION}';
+          var localV = localStorage.getItem('cms_nuclear_v');
           
-          // 精准狙击：只清理当前 Notes 目录的 Service Worker 缓存，绝对不碰你其他站点的 Cookie 和数据
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-              for(var i = 0; i < registrations.length; i++) {
-                if (registrations[i].scope.includes('/Notes/')) {
-                  registrations[i].unregister();
+          if (localV !== serverV) {
+            // 1. 强杀当前目录下的 Service Worker（绝不碰你域名的其他网站）
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                for (var i = 0; i < regs.length; i++) {
+                  if (regs[i].scope.includes('/Notes/')) regs[i].unregister();
                 }
-              }
-            });
+              });
+            }
+            
+            // 2. 强杀 Cache API（很多手机浏览器暗中使用的缓存池）
+            if ('caches' in window) {
+              caches.keys().then(function(keyList) {
+                keyList.forEach(function(key) { caches.delete(key); });
+              });
+            }
+            
+            // 3. 记录最新版本，并给自己挂上随机参数强行自杀式刷新
+            localStorage.setItem('cms_nuclear_v', serverV);
+            var url = new URL(window.location.href);
+            url.searchParams.set('v', serverV);
+            window.location.replace(url.href);
           }
-          
-          // 自动重定向：如果当前 URL 没有带上最新的随机戳，系统自动给你加上并刷新
-          var url = new URL(window.location.href);
-          if (url.searchParams.get('v') !== latestVersion) {
-            url.searchParams.set('v', latestVersion);
-            window.location.replace(url.href); // 浏览器会自动重新拉取真实代码
-          }
-        }
+        } catch(e) {}
       })();
     `]
   ],
